@@ -677,11 +677,6 @@ class IvSyntheticCancerDatasetCollection(SyntheticDatasetCollection):
         self.has_vitals = False
         self.train_scaling_params = self.train_f.get_scaling_params()
 
-
-import numpy as np
-from scipy.stats import pearsonr, spearmanr
-import matplotlib.pyplot as plt
-
 def calculate_iv_treatment_correlation(treatment, iv, method='pearson'):
     """
     计算工具变量 (IV) 和治疗变量 (Treatment) 的相关性矩阵，treatment 被转换为数值表示。
