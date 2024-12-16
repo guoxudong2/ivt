@@ -1,0 +1,29 @@
+# @package _global_
+dataset:
+  coeff: 1.0
+  chemo_coeff: 1.0 #
+  radio_coeff: 0.0 #
+
+model:
+  ivt:
+    optimizer:
+      learning_rate: 0.001
+    batch_size: 128
+    seq_hidden_units: 16
+    br_size: 12
+    fc_hidden_units: 24
+    dropout_rate: 0.1
+
+    dim_iv: 1
+    n_components: 4
+    treatment_types: 2
+
+  self_positional_encoding:
+    max_relative_position: 15
+
+exp:
+  weights_ema: True
+  alpha: 0.01
+  beta: 0.99
+  balancing: domain_confusion
+  max_epochs: 150
