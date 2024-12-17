@@ -9,9 +9,7 @@ from src.data.dataset_collection import SyntheticDatasetCollection
 from src.data.cancer_sim.iv_cancer_simulation import TUMOUR_DEATH_THRESHOLD
 from src.data.cancer_sim.iv_cancer_simulation import generate_params, get_scaling_params, simulate_factual, \
     simulate_counterfactual_1_step, simulate_counterfactuals_treatment_seq
-from scipy.stats import pearsonr, spearmanr
-import matplotlib.pyplot as plt
-
+from src.data.cancer_sim.visualize import calculate_iv_treatment_correlation, plot_iv_treatment_correlation
 logger = logging.getLogger(__name__)
 
 
@@ -62,8 +60,9 @@ class IvSyntheticCancerDataset(Dataset):
         self.params = generate_params(num_patients, chemo_coeff=chemo_coeff, radio_coeff=radio_coeff, window_size=window_size,
                                       lag=lag)
         self.subset_name = subset_name
-
+        print(f'IvSyntheticCancerDataset: CHEMO_COEFF:{chemo_coeff}, RADIO_COEFF:{radio_coeff}')
         if mode == 'factual':
+            print(f'CHEMO_IV_RATIO: {chemo_iv_ratio}')
             self.data = simulate_factual(self.params, seq_length, u_ratio, chemo_iv_ratio, radio_iv_ratio)
         elif mode == 'counterfactual_one_step':
             self.data = simulate_counterfactual_1_step(self.params, seq_length, u_ratio, chemo_iv_ratio, radio_iv_ratio)
@@ -119,8 +118,10 @@ class IvSyntheticCancerDataset(Dataset):
             cancer_volume = (self.data['cancer_volume'] - mean['cancer_volume']) / std['cancer_volume']
             patient_types = (self.data['patient_types'] - mean['patient_types']) / std['patient_types']
             U = (self.data['U'] - mean['U']) / std['U']
-            chemo_iv = (self.data['chemo_iv'] - mean['chemo_iv']) / std['chemo_iv']
-            radio_iv = (self.data['radio_iv'] - mean['radio_iv']) / std['radio_iv']
+            '''chemo_iv = (self.data['chemo_iv'] - mean['chemo_iv']) / std['chemo_iv']
+            radio_iv = (self.data['radio_iv'] - mean['radio_iv']) / std['radio_iv']'''
+            chemo_iv = self.data['chemo_iv']
+            radio_iv = self.data['radio_iv']
 
             patient_types = np.stack([patient_types for t in range(cancer_volume.shape[1])], axis=1)
 
@@ -133,7 +134,10 @@ class IvSyntheticCancerDataset(Dataset):
 
             treatments = np.concatenate(
                 [chemo_application[:, :-offset, np.newaxis], radio_application[:, :-offset, np.newaxis]], axis=-1)
-
+            print(f'DATASET:CHEMO_APPLICATION:{chemo_application[:2]}')
+            chemo_treatments = chemo_application[:, :-offset, np.newaxis]
+            radio_treatments = radio_application[:, :-offset, np.newaxis]
+            print(f'chemo_treatments:{chemo_treatments[:2]}')
             U = U[:, :-offset, np.newaxis]
             chemo_iv = chemo_iv[:, :-offset, np.newaxis]
             radio_iv = radio_iv[:, :-offset, np.newaxis]
@@ -143,6 +147,8 @@ class IvSyntheticCancerDataset(Dataset):
 
             if self.treatment_mode == 'multiclass':
                 one_hot_treatments = np.zeros(shape=(treatments.shape[0], treatments.shape[1], 4))
+                chemo_one_hot_treatment = np.zeros(shape=(treatments.shape[0], treatments.shape[1], 2))
+                radio_one_hot_treatment = np.zeros(shape=(treatments.shape[0], treatments.shape[1], 2))
                 for patient_id in range(treatments.shape[0]):
                     for timestep in range(treatments.shape[1]):
                         if (treatments[patient_id][timestep][0] == 0 and treatments[patient_id][timestep][1] == 0):
@@ -153,6 +159,17 @@ class IvSyntheticCancerDataset(Dataset):
                             one_hot_treatments[patient_id][timestep] = [0, 0, 1, 0]
                         elif (treatments[patient_id][timestep][0] == 1 and treatments[patient_id][timestep][1] == 1):
                             one_hot_treatments[patient_id][timestep] = [0, 0, 0, 1]
+                    for timestep in range(chemo_treatments.shape[1]):
+                        if(chemo_treatments[patient_id][timestep].item() == 1):
+                            chemo_one_hot_treatment[patient_id][timestep] = [1, 0]
+                        else:
+                            chemo_one_hot_treatment[patient_id][timestep] = [0, 1]
+
+                    for timestep in range(radio_treatments.shape[1]):
+                        if(radio_treatments[patient_id][timestep].item() == 1):
+                            radio_one_hot_treatment[patient_id][timestep] = [1, 0]
+                        else:
+                            radio_one_hot_treatment[patient_id][timestep] = [0, 1]
 
                 one_hot_previous_treatments = one_hot_treatments[:, :-1, :]
 
@@ -200,8 +217,11 @@ class IvSyntheticCancerDataset(Dataset):
             logger.info(f'Shape of processed {self.subset_name} data: {data_shapes}')
 
             self.processed = True
-            corr_matrix = calculate_iv_treatment_correlation(self.data['current_treatments'], self.data['chemo_iv'])
+
+            '''corr_matrix = calculate_iv_treatment_correlation(chemo_one_hot_treatment, self.data['chemo_iv'])
             plot_iv_treatment_correlation(corr_matrix)
+            radio_corr_matrix = calculate_iv_treatment_correlation(radio_one_hot_treatment, self.data['radio_iv'])
+            plot_iv_treatment_correlation(radio_corr_matrix)'''
         else:
             logger.info(f'{self.subset_name} Dataset already processed')
 
@@ -661,66 +681,19 @@ class IvSyntheticCancerDatasetCollection(SyntheticDatasetCollection):
         self.chemo_iv_ratio = chemo_iv_ratio
         self.radio_iv_ratio = radio_iv_ratio
 
+        print(f'CHEMO_COEFF:{chemo_coeff}, RADIO_COEFF:{radio_coeff}')
         self.train_f = IvSyntheticCancerDataset(chemo_coeff, radio_coeff, num_patients['train'], window_size, max_seq_length,
-                                              'train', lag=lag, treatment_mode=treatment_mode)
+                                              'train', lag=lag, treatment_mode=treatment_mode, u_ratio=u_ratio, chemo_iv_ratio=chemo_iv_ratio, radio_iv_ratio=radio_iv_ratio)
         self.val_f = IvSyntheticCancerDataset(chemo_coeff, radio_coeff, num_patients['val'], window_size, max_seq_length, 'val',
-                                            lag=lag, treatment_mode=treatment_mode)
+                                            lag=lag, treatment_mode=treatment_mode, u_ratio=u_ratio, chemo_iv_ratio=chemo_iv_ratio, radio_iv_ratio=radio_iv_ratio)
         self.test_cf_one_step = IvSyntheticCancerDataset(chemo_coeff, radio_coeff, num_patients['test'], window_size,
                                                        max_seq_length, 'test', mode='counterfactual_one_step', lag=lag,
-                                                       treatment_mode=treatment_mode)
+                                                       treatment_mode=treatment_mode, u_ratio=u_ratio, chemo_iv_ratio=chemo_iv_ratio, radio_iv_ratio=radio_iv_ratio)
         self.test_cf_treatment_seq = IvSyntheticCancerDataset(chemo_coeff, radio_coeff, num_patients['test'], window_size,
                                                             max_seq_length, 'test', mode='counterfactual_treatment_seq',
                                                             projection_horizon=projection_horizon, lag=lag,
-                                                            cf_seq_mode=cf_seq_mode, treatment_mode=treatment_mode)
+                                                            cf_seq_mode=cf_seq_mode, treatment_mode=treatment_mode, u_ratio=u_ratio, chemo_iv_ratio=chemo_iv_ratio, radio_iv_ratio=radio_iv_ratio)
         self.projection_horizon = projection_horizon
         self.autoregressive = True
         self.has_vitals = False
         self.train_scaling_params = self.train_f.get_scaling_params()
-
-def calculate_iv_treatment_correlation(treatment, iv, method='pearson'):
-    """
-    计算工具变量 (IV) 和治疗变量 (Treatment) 的相关性矩阵，treatment 被转换为数值表示。
-
-    Args:
-        treatment: np.ndarray, 形状为 [num_samples, seq_length, dim_treatment] 的治疗变量 (one-hot)。
-        iv: np.ndarray, 形状为 [num_samples, seq_length, dim_iv] 的工具变量。
-        method: str, 相关性计算方法，支持 'pearson' 或 'spearman'。
-
-    Returns:
-        corr_matrix: np.ndarray, 形状为 [seq_length, dim_iv] 的相关性矩阵。
-    """
-    # 转换 one-hot 的 treatment 为数值表示
-    numeric_treatment = np.argmax(treatment, axis=-1)  # [num_samples, seq_length]
-    num_timesteps = numeric_treatment.shape[1]
-    dim_iv = iv.shape[2]
-    corr_matrix = np.zeros((num_timesteps, dim_iv))
-
-    for t in range(num_timesteps):
-        for dz in range(dim_iv):
-            if method == 'pearson':
-                corr_matrix[t, dz], _ = pearsonr(iv[:, t, dz], numeric_treatment[:, t])
-            elif method == 'spearman':
-                corr_matrix[t, dz], _ = spearmanr(iv[:, t, dz], numeric_treatment[:, t])
-    return corr_matrix
-
-def plot_iv_treatment_correlation(corr_matrix, iv_dim_labels=None):
-    """
-    绘制工具变量和数值化治疗变量之间的相关性矩阵。
-    Args:
-        corr_matrix: np.ndarray, 形状为 [seq_length, dim_iv] 的相关性矩阵。
-        iv_dim_labels: list[str], 工具变量的维度标签。
-    """
-    num_timesteps, dim_iv = corr_matrix.shape
-
-    plt.figure(figsize=(15, 8))
-    for dz in range(dim_iv):
-        label = f"Z_{dz}" if iv_dim_labels is None else iv_dim_labels[dz]
-        plt.plot(range(num_timesteps), corr_matrix[:, dz], label=label)
-
-    plt.axhline(0, color='red', linestyle='--', label='Zero Correlation')
-    plt.xlabel("Time Step")
-    plt.ylabel("Correlation")
-    plt.title("Correlation Between IV and Numeric Treatment Over Time")
-    plt.legend()
-    plt.grid()
-    plt.show()
