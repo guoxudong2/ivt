@@ -232,6 +232,7 @@ def simulate_factual(simulation_params, seq_length, u_ratio=0, chemo_iv_ratio=0,
     :param assigned_actions: Fixed non-random treatment assignment policy, if None - standard biased random assignment is applied
     :return: simulated data dict
     """
+    print(f'simulate_factual params:{simulation_params},seq_length:{seq_length},u_ratio:{u_ratio},chemo_iv_ratio:{chemo_iv_ratio}')
     total_num_radio_treatments = 1
     total_num_chemo_treatments = 1
 
@@ -382,7 +383,6 @@ def simulate_factual(simulation_params, seq_length, u_ratio=0, chemo_iv_ratio=0,
     chemo_iv=chemo_iv[:,:,np.newaxis]
     ONEHOT_CHEMO_APPLICATION_POINT[chemo_application_point == 1] = [1,0]
     ONEHOT_CHEMO_APPLICATION_POINT[chemo_application_point == 0] = [0,1]
-    #print(f'simulate2:ONEHOT_CHEMO_APPLICATION_POINT: {ONEHOT_CHEMO_APPLICATION_POINT[:2]}')
     corr_matrix = calculate_iv_treatment_correlation(ONEHOT_CHEMO_APPLICATION_POINT, chemo_iv)
     plot_iv_treatment_correlation(corr_matrix, "factual")
     return outputs
@@ -394,6 +394,7 @@ def simulate_counterfactual_1_step(simulation_params, seq_length, u_ratio=0, che
     :param seq_length: Maximum trajectory length (number of factual time-steps)
     :return: simulated data dict with number of rows equal to num_patients * seq_length * num_treatments
     """
+    print(f'cf 1step params:{simulation_params},seq_length:{seq_length},u_ratio:{u_ratio},chemo_iv_ratio:{chemo_iv_ratio}')
     print('RUN 1 STEP FUNC!!!')
     total_num_radio_treatments = 1
     total_num_chemo_treatments = 1
@@ -619,7 +620,7 @@ def simulate_counterfactuals_treatment_seq(simulation_params, seq_length, projec
     :param cf_seq_mode: Counterfactual sequence setting: sliding_treatment / random_trajectories
     :return: simulated data dict with number of rows equal to num_patients * seq_length * 2 * projection_horizon
     """
-
+    print(f'cf seq params:{simulation_params},seq_length:{seq_length},u_ratio:{u_ratio},chemo_iv_ratio:{chemo_iv_ratio}')
     if cf_seq_mode == 'sliding_treatment':
         chemo_arr = np.stack([np.eye(projection_horizon, dtype=int),
                               np.zeros((projection_horizon, projection_horizon), dtype=int)], axis=-1)
@@ -1096,29 +1097,31 @@ if __name__ == "__main__":
 
     np.random.seed(1)
 
-    seq_length = 200  # about half a year
+    seq_length = 60  # about half a year
     window_size = 15
     lag = 0  # lag of treatment assignment
     num_patients = 10000
-    chemo_coeff = radio_coeff = 10.0
+    #chemo_coeff = radio_coeff = 10.0
+    chemo_coeff = radio_coeff = 1.0
 
+    u_ratio=0
     chemo_iv_ratio=5
 
     params = generate_params(num_patients, chemo_coeff=chemo_coeff, radio_coeff=radio_coeff, window_size=window_size, lag=lag)
     params['window_size'] = window_size
-    training_data = simulate_factual(params, seq_length, u_ratio=0, chemo_iv_ratio=chemo_iv_ratio, radio_iv_ratio=0)
+    training_data = simulate_factual(params, seq_length, u_ratio=u_ratio, chemo_iv_ratio=chemo_iv_ratio, radio_iv_ratio=0)
 
     params = generate_params(int(num_patients / 10), chemo_coeff=chemo_coeff, radio_coeff=radio_coeff, window_size=window_size, lag=lag)
     params['window_size'] = window_size
-    validation_data = simulate_factual(params, seq_length, chemo_iv_ratio=chemo_iv_ratio)
+    validation_data = simulate_factual(params, seq_length, u_ratio=u_ratio, chemo_iv_ratio=chemo_iv_ratio)
 
     params = generate_params(int(num_patients / 10), chemo_coeff=chemo_coeff, radio_coeff=radio_coeff, window_size=window_size, lag=lag)
     params['window_size'] = window_size
-    test_data_counterfactuals = simulate_counterfactual_1_step(params, seq_length, u_ratio=0, chemo_iv_ratio=chemo_iv_ratio, radio_iv_ratio=0)
+    test_data_counterfactuals = simulate_counterfactual_1_step(params, seq_length, u_ratio=u_ratio, chemo_iv_ratio=chemo_iv_ratio, radio_iv_ratio=0)
 
     params = generate_params(int(num_patients / 10), chemo_coeff=chemo_coeff, radio_coeff=radio_coeff, window_size=window_size, lag=lag)
     params['window_size'] = window_size
-    test_data_seq = simulate_counterfactuals_treatment_seq(params, seq_length, 5, u_ratio=0, chemo_iv_ratio=chemo_iv_ratio, radio_iv_ratio=0)
+    test_data_seq = simulate_counterfactuals_treatment_seq(params, seq_length, 5, u_ratio=u_ratio, chemo_iv_ratio=chemo_iv_ratio, radio_iv_ratio=0)
 
     # Plot patient
     #plot_treatments(training_data, 572)
